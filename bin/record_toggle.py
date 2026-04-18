@@ -30,29 +30,35 @@ def _unique_session_id(base: str) -> str:
 
 
 def _spawn_ffmpeg(video_path: Path) -> int:
-    """Spawn ffmpeg in background. Returns PID."""
-    cmd = [
-        str(bin_dir() / "ffmpeg"),
-        "-y",
-        "-nostdin",  # don't read stdin — we stop via SIGINT
-        "-f", "avfoundation",
-        "-framerate", "30",
-        "-i", "1:0",  # screen dev 1, mic dev 0 (macOS default)
-        str(video_path),
-    ]
+    """Spawn ffmpeg fully detached via nohup + disown so it survives
+    when the spawning slash-command bash reaps its children.
+
+    Returns the ffmpeg PID (read from a pidfile the shell wrote).
+    """
+    ffmpeg = str(bin_dir() / "ffmpeg")
     log_path = video_path.parent / "ffmpeg.log"
-    log = open(log_path, "ab")
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-    finally:
-        log.close()  # subprocess duplicated the fd; child keeps writing
-    return proc.pid
+    pid_path = video_path.parent / "ffmpeg.pid"
+    # Quote every path to tolerate spaces. Use bash -c so nohup/disown work.
+    shell_cmd = (
+        f'nohup "{ffmpeg}" -y -nostdin -f avfoundation -framerate 30 '
+        f'-i "1:0" "{video_path}" '
+        f'>"{log_path}" 2>&1 & '
+        f'echo $! > "{pid_path}"; disown'
+    )
+    subprocess.run(
+        ["/bin/bash", "-c", shell_cmd],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    # Tiny wait so the pidfile is definitely written (bash already returned,
+    # but just in case the OS hasn't flushed the single write).
+    for _ in range(20):
+        if pid_path.exists() and pid_path.read_text().strip():
+            break
+        time.sleep(0.05)
+    return int(pid_path.read_text().strip())
 
 
 def start_recording(title: str | None) -> str:
