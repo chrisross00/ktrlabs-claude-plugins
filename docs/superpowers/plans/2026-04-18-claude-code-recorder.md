@@ -668,14 +668,14 @@ git commit -m "feat(bootstrap): add dep install + verify with manifest caching"
 # Runs `bootstrap.py check_and_install`. Fast path: ~50ms.
 set -euo pipefail
 
-PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 if ! command -v python3 >/dev/null 2>&1; then
     echo "claude-code-recorder: python3 not found; skipping bootstrap" >&2
     exit 0
 fi
 
-cd "$PLUGIN_DIR"
+cd "$PLUGIN_ROOT"
 python3 -m bin.bootstrap_cli
 ```
 
@@ -1989,11 +1989,10 @@ if __name__ == "__main__":
 
 ```markdown
 ---
-description: Record a narrated screen demo; toggle stop to emit transcript+screenshots as prompt.
-argument-hint: "[optional title]"
+description: Record a narrated screen demo (optional title arg); toggle stop emits transcript+screenshots as prompt.
 ---
 
-!`python3 -m bin.record_cli $ARGUMENTS`
+!`cd "${CLAUDE_PLUGIN_ROOT}" && python3 -m bin.record_cli $ARGUMENTS`
 ```
 
 - [ ] **Step 5: Run test, verify pass**
@@ -2265,11 +2264,10 @@ if __name__ == "__main__":
 
 ```markdown
 ---
-description: List or delete recording sessions. No args = list; args = delete.
-argument-hint: "[all | older-than <N> | <id>]"
+description: List recording sessions (no args) or delete them (args= all | older-than <Nd|Nh|Nm> | <id-or-slug>).
 ---
 
-!`python3 -m bin.clean_cli $ARGUMENTS`
+!`cd "${CLAUDE_PLUGIN_ROOT}" && python3 -m bin.clean_cli $ARGUMENTS`
 ```
 
 - [ ] **Step 5: Run test, verify pass**
@@ -2447,7 +2445,7 @@ if __name__ == "__main__":
 description: Diagnose and repair claude-code-recorder dependencies and state.
 ---
 
-!`python3 -m bin.doctor_cli`
+!`cd "${CLAUDE_PLUGIN_ROOT}" && python3 -m bin.doctor_cli`
 ```
 
 - [ ] **Step 5: Run test, verify pass**
@@ -2477,25 +2475,26 @@ git commit -m "feat(cli): /record-doctor diagnostics command"
   "version": "0.1.0",
   "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
   "author": "Chris",
-  "commands": [
-    {
-      "name": "record",
-      "file": "commands/record.md"
-    },
-    {
-      "name": "record-clean",
-      "file": "commands/record-clean.md"
-    },
-    {
-      "name": "record-doctor",
-      "file": "commands/record-doctor.md"
-    }
-  ],
   "hooks": {
-    "SessionStart": "hooks/session-start.sh"
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
+
+Notes:
+- Commands in `commands/` are auto-discovered — no explicit `commands` array.
+- Hook schema matches `settings.json`: object keyed by event, with matcher + hooks array.
+- Use `${CLAUDE_PLUGIN_ROOT}` for absolute paths.
 
 - [ ] **Step 2: Verify JSON is valid**
 
