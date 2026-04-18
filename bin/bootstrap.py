@@ -47,39 +47,40 @@ def fast_path_ok() -> bool:
     )
 
 
-def install_ffmpeg(dest: Path) -> str:
-    """Install ffmpeg by copying from `brew --prefix` or downloading static build."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    brew = shutil.which("brew")
-    if brew:
-        result = subprocess.run([brew, "--prefix", "ffmpeg"], capture_output=True, text=True)
-        if result.returncode == 0:
-            src = Path(result.stdout.strip()) / "bin" / "ffmpeg"
-            if src.exists():
-                shutil.copy(src, dest)
-                dest.chmod(0o755)
-                return compute_sha256(dest)
-        subprocess.run([brew, "install", "ffmpeg"], check=True)
-        result = subprocess.run([brew, "--prefix", "ffmpeg"], capture_output=True, text=True, check=True)
-        src = Path(result.stdout.strip()) / "bin" / "ffmpeg"
-        shutil.copy(src, dest)
-        dest.chmod(0o755)
-        return compute_sha256(dest)
-    raise BootstrapError("Homebrew not found. Install from https://brew.sh then retry.")
+def _link_brew_binary(dest: Path, formula: str, binary_name: str) -> str:
+    """Ensure `formula` is installed via brew, then symlink its binary to dest.
 
-
-def install_whisper(dest: Path) -> str:
-    """Install whisper.cpp binary via brew (whisper-cpp package)."""
+    Symlink (not copy) preserves the binary's @rpath-relative dylib lookups
+    so libraries in the brew prefix's lib/ still resolve.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     brew = shutil.which("brew")
     if not brew:
         raise BootstrapError("Homebrew not found. Install from https://brew.sh then retry.")
-    subprocess.run([brew, "install", "whisper-cpp"], check=True)
-    result = subprocess.run([brew, "--prefix", "whisper-cpp"], capture_output=True, text=True, check=True)
-    src = Path(result.stdout.strip()) / "bin" / "whisper-cli"
-    shutil.copy(src, dest)
-    dest.chmod(0o755)
+    # `brew --prefix <formula>` exits non-zero if not installed.
+    probe = subprocess.run([brew, "--prefix", formula], capture_output=True, text=True)
+    if probe.returncode != 0:
+        subprocess.run([brew, "install", formula], check=True)
+        probe = subprocess.run(
+            [brew, "--prefix", formula], capture_output=True, text=True, check=True
+        )
+    src = Path(probe.stdout.strip()) / "bin" / binary_name
+    if not src.exists():
+        raise BootstrapError(
+            f"Expected {src} after `brew install {formula}` but it is missing."
+        )
+    if dest.exists() or dest.is_symlink():
+        dest.unlink()
+    dest.symlink_to(src)
     return compute_sha256(dest)
+
+
+def install_ffmpeg(dest: Path) -> str:
+    return _link_brew_binary(dest, "ffmpeg", "ffmpeg")
+
+
+def install_whisper(dest: Path) -> str:
+    return _link_brew_binary(dest, "whisper-cpp", "whisper-cli")
 
 
 def download_model(dest: Path) -> str:
