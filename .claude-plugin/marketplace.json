@@ -1,0 +1,14 @@
+{
+  "name": "claude-code-recorder",
+  "owner": {
+    "name": "Chris"
+  },
+  "plugins": [
+    {
+      "name": "claude-code-recorder",
+      "source": "./",
+      "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
+      "version": "0.1.0"
+    }
+  ]
+}
