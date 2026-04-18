@@ -14,11 +14,16 @@ def cache_root() -> Path:
 
 
 def plugin_data_root() -> Path:
-    """Persistent plugin data dir (binaries, model). Provided by CC."""
+    """Persistent plugin data dir (binaries, model).
+
+    CLAUDE_PLUGIN_DATA is honored when set (hooks, tests), but CC doesn't
+    appear to set it for slash-command bash. Fall back to a stable user-scoped
+    location so both contexts read/write the same path.
+    """
     value = os.environ.get("CLAUDE_PLUGIN_DATA")
-    if not value:
-        raise RuntimeError("CLAUDE_PLUGIN_DATA not set — run via plugin hook")
-    return Path(value)
+    if value:
+        return Path(value)
+    return Path.home() / ".local" / "share" / "claude-code-recorder"
 
 
 def state_file() -> Path:
