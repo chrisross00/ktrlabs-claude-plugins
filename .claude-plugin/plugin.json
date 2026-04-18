@@ -1,0 +1,19 @@
+{
+  "name": "claude-code-recorder",
+  "version": "0.1.0",
+  "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
+  "author": "Chris",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
