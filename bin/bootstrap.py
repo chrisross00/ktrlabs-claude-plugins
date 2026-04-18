@@ -76,7 +76,7 @@ def install_whisper(dest: Path) -> str:
         raise BootstrapError("Homebrew not found. Install from https://brew.sh then retry.")
     subprocess.run([brew, "install", "whisper-cpp"], check=True)
     result = subprocess.run([brew, "--prefix", "whisper-cpp"], capture_output=True, text=True, check=True)
-    src = Path(result.stdout.strip()) / "bin" / "whisper-cpp"
+    src = Path(result.stdout.strip()) / "bin" / "whisper-cli"
     shutil.copy(src, dest)
     dest.chmod(0o755)
     return compute_sha256(dest)
