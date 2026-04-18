@@ -34,18 +34,24 @@ def _spawn_ffmpeg(video_path: Path) -> int:
     cmd = [
         str(bin_dir() / "ffmpeg"),
         "-y",
+        "-nostdin",  # don't read stdin — we stop via SIGINT
         "-f", "avfoundation",
         "-framerate", "30",
         "-i", "1:0",  # screen dev 1, mic dev 0 (macOS default)
         str(video_path),
     ]
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    log_path = video_path.parent / "ffmpeg.log"
+    log = open(log_path, "ab")
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    finally:
+        log.close()  # subprocess duplicated the fd; child keeps writing
     return proc.pid
 
 
