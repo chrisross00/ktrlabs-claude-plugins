@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 
+from bin import state as _state_mod
 from bin.paths import bin_dir, session_dir, sessions_root
 from bin.slug import slugify
 from bin.state import State, save_state
@@ -66,3 +69,59 @@ def start_recording(title: str | None) -> str:
     pid = _spawn_ffmpeg(video_path)
     save_state(State(pid=pid, session_id=session_id, started_at=time.time()))
     return session_id
+
+
+def _stop_ffmpeg(pid: int, timeout_s: float = 10.0) -> None:
+    """Send SIGINT (lets ffmpeg flush the MP4 moov atom), then wait."""
+    try:
+        os.kill(pid, signal.SIGINT)
+    except ProcessLookupError:
+        return
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if not _state_mod.is_process_alive(pid):
+            return
+        time.sleep(0.1)
+    # Escalate if ffmpeg won't exit cleanly.
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def _run_pipeline(sdir: Path) -> None:
+    """Import lazily so start-path doesn't pay pipeline import cost."""
+    from bin.pipeline.transcribe import transcribe
+    from bin.pipeline.extract_frames import extract_frames
+    from bin.pipeline.assemble import assemble
+
+    try:
+        transcribe(sdir)
+    except Exception as e:
+        (sdir / "transcribe.error.txt").write_text(str(e))
+
+    try:
+        extract_frames(sdir)
+    except Exception as e:
+        (sdir / "extract_frames.error.txt").write_text(str(e))
+
+    # assemble always runs — it handles upstream errors.
+    assemble(sdir)
+
+
+def stop_recording() -> Path | None:
+    """Stop active recording and run the pipeline. Returns session dir or None."""
+    state_obj = _state_mod.load_state()
+    if state_obj is None:
+        return None
+
+    if not _state_mod.is_process_alive(state_obj.pid):
+        _state_mod.clear_state()
+        return None
+
+    _stop_ffmpeg(state_obj.pid)
+    _state_mod.clear_state()
+
+    sdir = session_dir(state_obj.session_id)
+    _run_pipeline(sdir)
+    return sdir
