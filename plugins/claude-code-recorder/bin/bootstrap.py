@@ -18,12 +18,13 @@ from bin.paths import bin_dir, models_dir
 
 FFMPEG_PATH_REL = "ffmpeg"
 WHISPER_PATH_REL = "whisper"
-# base multilingual: ~150MB. Noticeably more accurate than tiny (which garbled
-# normal narration in testing) while still ~70% smaller than small. Supports
-# all languages via a single model.
-MODEL_PATH_REL = "ggml-base.bin"
-MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
-MODEL_MIN_BYTES = 100_000_000  # base is ~140MB; refuse anything suspiciously small
+# small multilingual: ~465MB. Accuracy is the thing users notice every time
+# they transcribe a demo; download is a one-time ~5min cost at install. Tiny
+# and base both degraded transcripts enough that users paid for the savings
+# with worse output forever. Accuracy wins.
+MODEL_PATH_REL = "ggml-small.bin"
+MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+MODEL_MIN_BYTES = 400_000_000  # small is ~465MB
 MANIFEST_TTL = 7 * 86400  # 7 days
 
 

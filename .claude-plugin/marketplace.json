@@ -8,7 +8,7 @@
       "name": "claude-code-recorder",
       "source": "./plugins/claude-code-recorder",
       "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
-      "version": "0.4.0"
+      "version": "0.4.1"
     }
   ]
 }
