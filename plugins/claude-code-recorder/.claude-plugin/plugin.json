@@ -2,7 +2,9 @@
   "name": "claude-code-recorder",
   "version": "0.4.2",
   "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
-  "author": {"name": "Chris"},
+  "author": {"name": "Chris Ross", "url": "https://github.com/chrisross00"},
+  "license": "MIT",
+  "homepage": "https://github.com/chrisross00/ktrlabs-claude-plugins",
   "hooks": {
     "SessionStart": [
       {

@@ -1,7 +1,8 @@
 {
   "name": "ktrlabs-claude-plugins",
   "owner": {
-    "name": "Chris Ross (ktrlabs)"
+    "name": "Chris Ross (ktrlabs)",
+    "url": "https://github.com/chrisross00"
   },
   "plugins": [
     {
