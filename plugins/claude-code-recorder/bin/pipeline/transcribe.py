@@ -34,9 +34,14 @@ def _extract_audio(video_path: Path, audio_path: Path) -> None:
 
 
 def _run_whisper(audio_path: Path) -> dict:
-    """Invoke whisper.cpp with JSON output. Returns parsed JSON."""
+    """Invoke whisper.cpp with JSON output. Returns parsed JSON.
+
+    Raises RuntimeError with whisper's actual stderr on failure, so
+    transcribe.error.txt captures the cause (missing model, bad audio, etc.)
+    instead of just 'exit status 3'.
+    """
     out_prefix = audio_path.with_suffix("")
-    subprocess.run(
+    result = subprocess.run(
         [
             str(bin_dir() / "whisper"),
             "-m", str(models_dir() / MODEL_PATH_REL),
@@ -44,9 +49,16 @@ def _run_whisper(audio_path: Path) -> dict:
             "-oj",
             "-of", str(out_prefix),
         ],
-        check=True,
+        check=False,
         capture_output=True,
     )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        stdout = result.stdout.decode("utf-8", errors="replace").strip()
+        tail = "\n".join(stderr.splitlines()[-8:]) or stdout[-500:]
+        raise RuntimeError(
+            f"whisper-cli failed (exit {result.returncode}):\n{tail}"
+        )
     return json.loads(out_prefix.with_suffix(".json").read_text())
 
 

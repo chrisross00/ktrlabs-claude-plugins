@@ -123,15 +123,24 @@ def _frame_filename(event: FrameEvent) -> str:
 
 
 def extract_frames(session_dir: Path) -> None:
-    """Produce frames/*.png and frames.json from video.mp4 + transcript.json."""
+    """Produce frames/*.png and frames.json from video.mp4.
+
+    Transcript is optional — if transcribe failed upstream, we still produce
+    scene-change frames (just no deictic-cue frames). Partial output is
+    strictly better than total failure here.
+    """
     video = session_dir / "video.mp4"
-    transcript = json.loads((session_dir / "transcript.json").read_text())
 
     frames_dir = session_dir / "frames"
     frames_dir.mkdir(exist_ok=True)
 
+    transcript_path = session_dir / "transcript.json"
+    transcript_segments: list[dict] = []
+    if transcript_path.exists():
+        transcript_segments = json.loads(transcript_path.read_text()).get("segments", [])
+
     scene_events = [FrameEvent(t, "scene") for t in _detect_scene_changes(video)]
-    cue_events = find_deictic_cues(transcript["segments"])
+    cue_events = find_deictic_cues(transcript_segments)
     merged = merge_events(scene_events, cue_events, DEDUP_WINDOW_S)
 
     for e in merged:

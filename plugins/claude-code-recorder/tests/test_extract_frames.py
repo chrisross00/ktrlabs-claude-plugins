@@ -82,3 +82,30 @@ def test_extract_frames_integration(
         assert "timestamp_s" in f
         assert "filename" in f
         assert "trigger" in f
+
+
+@patch("bin.pipeline.extract_frames._perceptual_dedup")
+@patch("bin.pipeline.extract_frames._extract_frame_png")
+@patch("bin.pipeline.extract_frames._detect_scene_changes")
+def test_extract_frames_without_transcript_still_emits_scene_frames(
+    detect_scene: MagicMock,
+    extract_png: MagicMock,
+    perceptual: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """If transcribe failed upstream (no transcript.json), frames should
+    still be produced from scene-change timestamps alone."""
+    sdir = tmp_path / "session"
+    sdir.mkdir()
+    (sdir / "video.mp4").write_bytes(b"fake")
+    # Intentionally: no transcript.json.
+
+    detect_scene.return_value = [1.0, 4.5]
+    perceptual.side_effect = lambda events, frames_dir: events
+    extract_png.side_effect = lambda video, ts, out: out.write_bytes(b"png")
+
+    extract_frames(sdir)
+
+    frames = json.loads((sdir / "frames.json").read_text())["frames"]
+    assert len(frames) == 2
+    assert all(f["trigger"] == "scene" for f in frames)

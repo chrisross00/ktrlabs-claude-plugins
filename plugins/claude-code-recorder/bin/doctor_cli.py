@@ -20,7 +20,56 @@ def _check_deps() -> list[str]:
         path = plugin_data_root() / rel
         status = "OK" if path.exists() else "MISSING"
         lines.append(f"  {rel}: {status}")
+    # Presence isn't enough — the model file can exist but be corrupt/partial,
+    # or whisper-cli can be present but crash on load. Run a cheap smoke test.
+    lines.extend(_smoke_test_whisper())
     return lines
+
+
+def _smoke_test_whisper() -> list[str]:
+    ffmpeg = plugin_data_root() / "bin" / "ffmpeg"
+    whisper = plugin_data_root() / "bin" / "whisper"
+    model = plugin_data_root() / "models" / MODEL_PATH_REL
+    if not (ffmpeg.exists() and whisper.exists() and model.exists()):
+        return []  # _check_deps already flagged what's missing
+
+    with tempfile.TemporaryDirectory(prefix="cc-whisper-probe-") as tmp:
+        wav = Path(tmp) / "silence.wav"
+        # Generate 0.5s of silence at whisper's expected 16 kHz mono.
+        gen = subprocess.run(
+            [
+                str(ffmpeg), "-y", "-f", "lavfi",
+                "-i", "anullsrc=r=16000:cl=mono",
+                "-t", "0.5",
+                str(wav),
+            ],
+            capture_output=True,
+        )
+        if gen.returncode != 0 or not wav.exists():
+            return ["  whisper smoke test: SKIPPED (ffmpeg silence gen failed)"]
+
+        run = subprocess.run(
+            [
+                str(whisper),
+                "-m", str(model),
+                "-f", str(wav),
+                "-oj",
+                "-of", str(Path(tmp) / "out"),
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        if run.returncode == 0:
+            return ["  whisper smoke test: OK (model loaded + inferred on 0.5s)"]
+        tail = run.stderr.decode("utf-8", "replace").strip().splitlines()[-3:]
+        lines = [f"  whisper smoke test: FAILED (exit {run.returncode})"]
+        for t in tail:
+            lines.append(f"    {t}")
+        lines.append(
+            "  Fix: rm ~/.local/share/claude-code-recorder/models/*.bin and "
+            "rerun /record-doctor to re-download."
+        )
+        return lines
 
 
 def _check_state() -> list[str]:
