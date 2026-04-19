@@ -1,6 +1,6 @@
 {
   "name": "claude-code-recorder",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
   "author": {"name": "Chris"},
   "hooks": {
