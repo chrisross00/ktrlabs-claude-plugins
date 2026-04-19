@@ -1,10 +1,23 @@
-"""CLI for /record-setup: first-run install + permission check."""
+"""CLI for /record-setup: first-run install + permission request + probe."""
 from __future__ import annotations
 
 import sys
 
 from bin.bootstrap import BootstrapError, check_and_install
-from bin.probe import permission_remediation_lines, run_probe
+from bin.probe import (
+    permission_remediation_lines,
+    request_microphone_access,
+    request_screen_access,
+    run_probe,
+)
+
+
+def _describe(result: bool | None) -> str:
+    if result is True:
+        return "granted"
+    if result is False:
+        return "denied (or dismissed)"
+    return "could not request — swift not available; grant manually in System Settings"
 
 
 def main(argv: list[str]) -> int:
@@ -13,7 +26,7 @@ def main(argv: list[str]) -> int:
 
     # 1. Bootstrap: install/verify ffmpeg, whisper-cli, model.
     print()
-    print("Step 1/2: installing dependencies...")
+    print("Step 1/3: installing dependencies...")
     try:
         check_and_install()
     except BootstrapError as e:
@@ -24,10 +37,18 @@ def main(argv: list[str]) -> int:
         return 2
     print("  Done.")
 
-    # 2. Probe avfoundation so the macOS permission dialog fires now
-    #    rather than on the user's first /record.
+    # 2. Explicitly call macOS permission APIs. These trigger the system
+    #    prompts on first run (or return the cached decision silently).
     print()
-    print("Step 2/2: verifying macOS permissions (Screen Recording + Microphone)...")
+    print("Step 2/3: requesting macOS permissions (accept any dialogs that appear)...")
+    screen = request_screen_access()
+    mic = request_microphone_access()
+    print(f"  Screen Recording request: {_describe(screen)}")
+    print(f"  Microphone request:       {_describe(mic)}")
+
+    # 3. Probe avfoundation to verify the grant actually works end-to-end.
+    print()
+    print("Step 3/3: verifying capture works...")
     result = run_probe()
 
     screen = "OK" if result.screen_ok else "DENIED"

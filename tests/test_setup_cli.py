@@ -10,9 +10,13 @@ from bin.setup_cli import main
 
 
 @patch("bin.setup_cli.run_probe")
+@patch("bin.setup_cli.request_microphone_access", return_value=True)
+@patch("bin.setup_cli.request_screen_access", return_value=True)
 @patch("bin.setup_cli.check_and_install")
 def test_happy_path(
     bootstrap: MagicMock,
+    req_screen: MagicMock,
+    req_mic: MagicMock,
     probe: MagicMock,
     tmp_cache_root: Path,
     tmp_plugin_data: Path,
@@ -25,15 +29,23 @@ def test_happy_path(
     assert code == 0
     out = capsys.readouterr().out
     assert "Setup complete" in out
+    assert "Screen Recording request: granted" in out
+    assert "Microphone request:       granted" in out
     assert "Screen Recording: OK" in out
     assert "Microphone:       OK" in out
     bootstrap.assert_called_once()
+    req_screen.assert_called_once()
+    req_mic.assert_called_once()
 
 
 @patch("bin.setup_cli.run_probe")
+@patch("bin.setup_cli.request_microphone_access", return_value=False)
+@patch("bin.setup_cli.request_screen_access", return_value=False)
 @patch("bin.setup_cli.check_and_install")
 def test_probe_failure_returns_nonzero_and_shows_remediation(
     bootstrap: MagicMock,
+    req_screen: MagicMock,
+    req_mic: MagicMock,
     probe: MagicMock,
     tmp_cache_root: Path,
     tmp_plugin_data: Path,
@@ -48,15 +60,20 @@ def test_probe_failure_returns_nonzero_and_shows_remediation(
     code = main([])
     assert code == 1
     out = capsys.readouterr().out
+    assert "Screen Recording request: denied" in out
     assert "Screen Recording: DENIED" in out
     assert "Microphone:       DENIED" in out
     assert "access denied" in out
     assert "Privacy & Security" in out
 
 
+@patch("bin.setup_cli.request_microphone_access", return_value=True)
+@patch("bin.setup_cli.request_screen_access", return_value=True)
 @patch("bin.setup_cli.check_and_install", side_effect=RuntimeError("install failed"))
 def test_bootstrap_failure_returns_nonzero(
     bootstrap: MagicMock,
+    req_screen: MagicMock,
+    req_mic: MagicMock,
     tmp_cache_root: Path,
     tmp_plugin_data: Path,
     capsys: pytest.CaptureFixture[str],

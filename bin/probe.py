@@ -4,9 +4,15 @@ Spawns ffmpeg, polls the output file for growth up to PROBE_WAIT_S, then
 stops ffmpeg. Uses ffprobe to check which streams actually made it into
 the file so Screen Recording and Microphone permissions are reported
 independently (size alone can pass on mic-only output).
+
+Also exposes `request_screen_access()` which invokes macOS's
+CGRequestScreenCaptureAccess() — the documented API for triggering the
+Screen Recording permission prompt. ffmpeg/avfoundation doesn't reliably
+surface the prompt on modern macOS; calling the CG API directly does.
 """
 from __future__ import annotations
 
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -129,6 +135,65 @@ def run_probe() -> ProbeResult:
         bytes_seen=final_bytes,
         stderr_tail=tail,
     )
+
+
+def request_screen_access(timeout_s: float = 60.0) -> bool | None:
+    """Invoke macOS `CGRequestScreenCaptureAccess()` via a swift one-liner.
+
+    This is the documented API for triggering the Screen Recording permission
+    prompt — it shows the system dialog when no TCC decision exists, or
+    returns the cached decision silently otherwise.
+
+    Returns:
+        True  — access granted (prompted + allowed, or previously allowed)
+        False — access denied (prompted + denied, or previously denied)
+        None  — swift isn't available on this machine
+    """
+    swift = shutil.which("swift")
+    if not swift:
+        return None
+    code = "import CoreGraphics; exit(CGRequestScreenCaptureAccess() ? 0 : 1)"
+    try:
+        result = subprocess.run(
+            [swift, "-e", code],
+            capture_output=True,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0
+
+
+def request_microphone_access(timeout_s: float = 60.0) -> bool | None:
+    """Invoke macOS `AVCaptureDevice.requestAccess(for: .audio)`.
+
+    Same pattern as `request_screen_access` for the Microphone permission.
+    Uses a completion handler, so the swift snippet waits on a semaphore.
+    """
+    swift = shutil.which("swift")
+    if not swift:
+        return None
+    code = (
+        "import AVFoundation\n"
+        "import Foundation\n"
+        "let sem = DispatchSemaphore(value: 0)\n"
+        "var granted = false\n"
+        "AVCaptureDevice.requestAccess(for: .audio) { ok in\n"
+        "    granted = ok\n"
+        "    sem.signal()\n"
+        "}\n"
+        "_ = sem.wait(timeout: .now() + 55)\n"
+        "exit(granted ? 0 : 1)\n"
+    )
+    try:
+        result = subprocess.run(
+            [swift, "-e", code],
+            capture_output=True,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0
 
 
 def permission_remediation_lines() -> list[str]:
