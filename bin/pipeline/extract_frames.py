@@ -79,11 +79,19 @@ def _extract_frame_png(video: Path, timestamp_s: float, out_path: Path) -> None:
 
 
 def _perceptual_dedup(events: list[FrameEvent], frames_dir: Path) -> list[FrameEvent]:
-    """Drop frames whose perceptual hash is within 5 bits of a kept frame."""
-    import imagehash
-    from PIL import Image
+    """Drop frames whose perceptual hash is within 5 bits of a kept frame.
 
-    kept: list[tuple[FrameEvent, imagehash.ImageHash]] = []
+    If imagehash / Pillow aren't installed (e.g. plugin running under system
+    Python with no extra packages), skip dedup and return events as-is. The
+    2s timestamp-based dedup already handled the worst duplication.
+    """
+    try:
+        import imagehash
+        from PIL import Image
+    except ImportError:
+        return events
+
+    kept: list[tuple[FrameEvent, "imagehash.ImageHash"]] = []
     for e in events:
         filename = _frame_filename(e)
         path = frames_dir / filename
