@@ -62,8 +62,15 @@ def _check_permissions() -> list[str]:
                 timeout=15,
             )
         except subprocess.TimeoutExpired:
-            lines.append("  TIMEOUT — probe hung. Likely a permission dialog")
-            lines.append("  is open. Accept it and rerun /record-doctor.")
+            lines.append("  TIMEOUT — avfoundation produced no frames in 15s.")
+            lines.append("  On macOS this almost always means Screen Recording")
+            lines.append("  is DENIED (CLI tools never trigger the permission")
+            lines.append("  dialog; the parent terminal/Claude Code app must be")
+            lines.append("  granted access).")
+            lines.append("")
+            lines.append("  Open System Settings → Privacy & Security → Screen")
+            lines.append("  Recording, add/enable the app hosting Claude Code,")
+            lines.append("  restart that app, then rerun /record-doctor.")
             return lines
 
         size = out.stat().st_size if out.exists() else 0
