@@ -30,14 +30,19 @@ def main(argv: list[str]) -> int:
     print("Step 2/2: verifying macOS permissions (Screen Recording + Microphone)...")
     result = run_probe()
 
+    screen = "OK" if result.screen_ok else "DENIED"
+    mic = "OK" if result.mic_ok else "DENIED"
+    print(f"  Screen Recording: {screen}")
+    print(f"  Microphone:       {mic}")
+    print(f"  (probe output: {result.bytes_seen} bytes)")
+
     if result.captured:
-        print(f"  OK — captured {result.bytes_seen} bytes during probe.")
         print()
         print("Setup complete. Start a demo with /claude-code-recorder:record [title].")
         return 0
 
-    print(f"  NOT WORKING — only {result.bytes_seen} bytes captured.")
     if result.stderr_tail:
+        print()
         print("  Last ffmpeg output:")
         for line in result.stderr_tail:
             print(f"    {line}")

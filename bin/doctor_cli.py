@@ -42,10 +42,13 @@ def _check_permissions() -> list[str]:
         lines.append("  skipped — ffmpeg not installed. Run /record-setup first.")
         return lines
     result = run_probe()
+    screen = "OK" if result.screen_ok else "DENIED"
+    mic = "OK" if result.mic_ok else "DENIED"
+    lines.append(f"  Screen Recording: {screen}")
+    lines.append(f"  Microphone:       {mic}")
+    lines.append(f"  (probe output: {result.bytes_seen} bytes)")
     if result.captured:
-        lines.append(f"  OK — captured {result.bytes_seen} bytes during probe.")
         return lines
-    lines.append(f"  NOT WORKING — only {result.bytes_seen} bytes captured.")
     for stderr_line in result.stderr_tail:
         lines.append(f"    {stderr_line}")
     lines.append("")

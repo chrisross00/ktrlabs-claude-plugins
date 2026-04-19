@@ -1,8 +1,9 @@
 """Brief avfoundation probe shared by /record-setup and /record-doctor.
 
 Spawns ffmpeg, polls the output file for growth up to PROBE_WAIT_S, then
-stops ffmpeg. Returns whether bytes were actually captured (permission OK)
-plus ffmpeg's stderr tail so callers can surface diagnostics.
+stops ffmpeg. Uses ffprobe to check which streams actually made it into
+the file so Screen Recording and Microphone permissions are reported
+independently (size alone can pass on mic-only output).
 """
 from __future__ import annotations
 
@@ -21,15 +22,40 @@ PROBE_MIN_BYTES = 5_000
 
 @dataclass(frozen=True)
 class ProbeResult:
-    captured: bool
+    screen_ok: bool
+    mic_ok: bool
     bytes_seen: int
     stderr_tail: list[str]
+
+    @property
+    def captured(self) -> bool:
+        """Both permissions working."""
+        return self.screen_ok and self.mic_ok
+
+
+def _ffprobe_has_stream(ffprobe: Path, media: Path, kind: str) -> bool:
+    """kind is 'v' (video) or 'a' (audio)."""
+    result = subprocess.run(
+        [
+            str(ffprobe), "-v", "error",
+            "-select_streams", kind,
+            "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0",
+            str(media),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def run_probe() -> ProbeResult:
     ffmpeg = plugin_data_root() / "bin" / "ffmpeg"
+    # ffprobe lives next to ffmpeg in brew's prefix; when our bin/ffmpeg is
+    # a symlink to brew, ffprobe is at the sibling path in the same bin dir.
+    ffprobe = ffmpeg.resolve().parent / "ffprobe"
     if not ffmpeg.exists():
-        return ProbeResult(captured=False, bytes_seen=0, stderr_tail=["ffmpeg not installed"])
+        return ProbeResult(False, False, 0, ["ffmpeg not installed"])
 
     with tempfile.TemporaryDirectory(prefix="cc-recorder-probe-") as tmp:
         out = Path(tmp) / "probe.mp4"
@@ -48,14 +74,11 @@ def run_probe() -> ProbeResult:
             )
 
         deadline = time.time() + PROBE_WAIT_S
-        captured_bytes = 0
         while time.time() < deadline:
             if proc.poll() is not None:
                 break
-            if out.exists():
-                captured_bytes = out.stat().st_size
-                if captured_bytes >= PROBE_MIN_BYTES:
-                    break
+            if out.exists() and out.stat().st_size >= PROBE_MIN_BYTES:
+                break
             time.sleep(0.2)
 
         if proc.poll() is None:
@@ -69,11 +92,17 @@ def run_probe() -> ProbeResult:
         final_bytes = out.stat().st_size if out.exists() else 0
         stderr_text = err_log.read_text(errors="replace")
 
-    best = max(captured_bytes, final_bytes)
+        if final_bytes >= PROBE_MIN_BYTES and ffprobe.exists() and out.exists():
+            screen_ok = _ffprobe_has_stream(ffprobe, out, "v")
+            mic_ok = _ffprobe_has_stream(ffprobe, out, "a")
+        else:
+            screen_ok = mic_ok = False
+
     tail = [ln for ln in stderr_text.splitlines() if ln.strip()][-4:]
     return ProbeResult(
-        captured=best >= PROBE_MIN_BYTES,
-        bytes_seen=best,
+        screen_ok=screen_ok,
+        mic_ok=mic_ok,
+        bytes_seen=final_bytes,
         stderr_tail=tail,
     )
 

@@ -18,11 +18,15 @@ def test_happy_path(
     tmp_plugin_data: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    probe.return_value = ProbeResult(captured=True, bytes_seen=12345, stderr_tail=[])
+    probe.return_value = ProbeResult(
+        screen_ok=True, mic_ok=True, bytes_seen=12345, stderr_tail=[]
+    )
     code = main([])
     assert code == 0
     out = capsys.readouterr().out
     assert "Setup complete" in out
+    assert "Screen Recording: OK" in out
+    assert "Microphone:       OK" in out
     bootstrap.assert_called_once()
 
 
@@ -36,14 +40,16 @@ def test_probe_failure_returns_nonzero_and_shows_remediation(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     probe.return_value = ProbeResult(
-        captured=False,
+        screen_ok=False,
+        mic_ok=False,
         bytes_seen=0,
         stderr_tail=["[AVFoundation] access denied"],
     )
     code = main([])
     assert code == 1
     out = capsys.readouterr().out
-    assert "NOT WORKING" in out
+    assert "Screen Recording: DENIED" in out
+    assert "Microphone:       DENIED" in out
     assert "access denied" in out
     assert "Privacy & Security" in out
 
