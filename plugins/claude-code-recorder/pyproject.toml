@@ -16,6 +16,9 @@ dev = [
     "mypy>=1.10",
 ]
 
+[tool.setuptools.packages.find]
+include = ["bin*"]
+
 [tool.pytest.ini_options]
 markers = [
     "e2e: end-to-end tests requiring real whisper model (skipped by default)",

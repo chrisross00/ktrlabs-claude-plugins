@@ -1,12 +1,12 @@
 {
-  "name": "claude-code-recorder",
+  "name": "ktrlabs-claude-plugins",
   "owner": {
-    "name": "Chris"
+    "name": "Chris Ross (ktrlabs)"
   },
   "plugins": [
     {
       "name": "claude-code-recorder",
-      "source": "./",
+      "source": "./plugins/claude-code-recorder",
       "description": "Record a narrated screen demo; get transcript + screenshots as a prompt for Claude.",
       "version": "0.1.0"
     }

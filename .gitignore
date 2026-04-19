@@ -1,3 +1,7 @@
+# Top-level ignores (each plugin's own .gitignore covers plugin-specific items)
+.DS_Store
+.venv/
+venv/
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -6,8 +10,3 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.venv/
-venv/
-tests/fixtures/*.mp4
-tests/fixtures/*.wav
-!tests/fixtures/.gitkeep

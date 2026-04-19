@@ -6,14 +6,18 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  test-claude-code-recorder:
+    name: claude-code-recorder
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/claude-code-recorder
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install ffmpeg (for any pipeline tests that shell out)
+      - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install project
         run: |
