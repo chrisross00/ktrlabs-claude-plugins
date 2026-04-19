@@ -7,7 +7,7 @@ A Claude Code plugin marketplace authored by Chris Ross (ktrlabs).
 Add the marketplace, then install any plugin by name:
 
 ```
-/plugin marketplace add https://github.com/<your-org-or-handle>/ktrlabs-claude-plugins
+/plugin marketplace add https://github.com/chrisross00/ktrlabs-claude-plugins
 /plugin install claude-code-recorder@ktrlabs-claude-plugins
 ```
 
