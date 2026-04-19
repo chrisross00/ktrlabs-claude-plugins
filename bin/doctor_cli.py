@@ -1,9 +1,11 @@
 """CLI for /record-doctor: diagnostics and cleanup."""
 from __future__ import annotations
 
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from bin.bootstrap import check_and_install
@@ -34,12 +36,13 @@ def _check_state() -> list[str]:
     return lines
 
 
-def _check_permissions() -> list[str]:
-    """Probe avfoundation briefly to surface macOS permission state.
+_PROBE_WAIT_S = 6.0  # max time to wait for bytes to flow
+_PROBE_MIN_BYTES = 5_000  # output needed to declare "captured"
 
-    Runs a 0.5s ffmpeg capture to a throwaway file. Valid capture (>50KB) means
-    Screen Recording + Microphone are granted. Empty or tiny output means at
-    least one was denied / hasn't been approved yet.
+
+def _check_permissions() -> list[str]:
+    """Probe avfoundation by watching output file size grow, not by waiting
+    for ffmpeg to finish. Avoids false-timeout on slow device init.
     """
     lines = ["Permissions (macOS avfoundation probe):"]
     ffmpeg = plugin_data_root() / "bin" / "ffmpeg"
@@ -49,46 +52,64 @@ def _check_permissions() -> list[str]:
 
     with tempfile.TemporaryDirectory(prefix="cc-recorder-probe-") as tmp:
         out = Path(tmp) / "probe.mp4"
-        try:
-            result = subprocess.run(
+        err_log = Path(tmp) / "ffmpeg.stderr"
+        with open(err_log, "wb") as err_f:
+            proc = subprocess.Popen(
                 [
                     str(ffmpeg), "-y", "-nostdin",
                     "-f", "avfoundation", "-framerate", "30",
-                    "-i", "1:0", "-t", "0.5",
+                    "-i", "1:0",
                     str(out),
                 ],
-                capture_output=True,
-                text=True,
-                timeout=15,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=err_f,
             )
-        except subprocess.TimeoutExpired:
-            lines.append("  TIMEOUT — avfoundation produced no frames in 15s.")
-            lines.append("  On macOS this almost always means Screen Recording")
-            lines.append("  is DENIED (CLI tools never trigger the permission")
-            lines.append("  dialog; the parent terminal/Claude Code app must be")
-            lines.append("  granted access).")
-            lines.append("")
-            lines.append("  Open System Settings → Privacy & Security → Screen")
-            lines.append("  Recording, add/enable the app hosting Claude Code,")
-            lines.append("  restart that app, then rerun /record-doctor.")
-            return lines
 
-        size = out.stat().st_size if out.exists() else 0
+        # Poll for output-file growth up to _PROBE_WAIT_S.
+        deadline = time.time() + _PROBE_WAIT_S
+        captured_bytes = 0
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                break  # ffmpeg died — permission denied or other failure
+            if out.exists():
+                captured_bytes = out.stat().st_size
+                if captured_bytes >= _PROBE_MIN_BYTES:
+                    break
+            time.sleep(0.2)
 
-    if size > 50_000 and result.returncode == 0:
-        lines.append(f"  OK (probe captured {size // 1024} KB in 0.5s)")
+        # Stop ffmpeg (SIGINT for clean MP4 shutdown) so the probe is cheap.
+        if proc.poll() is None:
+            try:
+                proc.send_signal(signal.SIGINT)
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+        final_bytes = out.stat().st_size if out.exists() else 0
+        stderr_text = err_log.read_text(errors="replace")
+
+    if captured_bytes >= _PROBE_MIN_BYTES or final_bytes >= _PROBE_MIN_BYTES:
+        lines.append(f"  OK — avfoundation captured {max(captured_bytes, final_bytes)} bytes.")
         return lines
 
-    # Failure path — surface the last few stderr lines + remediation.
-    lines.append(f"  NOT WORKING (probe produced {size} bytes, ffmpeg exit {result.returncode})")
-    tail = [line for line in result.stderr.splitlines() if line.strip()][-4:]
+    lines.append(
+        f"  NOT WORKING — no capture output after {_PROBE_WAIT_S}s "
+        f"(got {final_bytes} bytes)."
+    )
+    tail = [ln for ln in stderr_text.splitlines() if ln.strip()][-4:]
     for line in tail:
         lines.append(f"    {line}")
     lines.append("")
-    lines.append("  To grant permissions on macOS:")
-    lines.append("    System Settings → Privacy & Security → Screen Recording → enable for Claude Code / Terminal")
-    lines.append("    System Settings → Privacy & Security → Microphone → same")
-    lines.append("  Then rerun /record-doctor to verify.")
+    lines.append("  If ffmpeg logged nothing at all, permission is DENIED")
+    lines.append("  (CLI tools never trigger macOS permission dialogs — the")
+    lines.append("  parent app like cmux/Terminal must be granted):")
+    lines.append("    System Settings → Privacy & Security → Screen Recording")
+    lines.append("    System Settings → Privacy & Security → Microphone")
+    lines.append("  If the app isn't listed: the `+` button or quit+relaunch.")
+    lines.append("  If it's listed but toggled off and mic has no `-` button,")
+    lines.append("  use: tccutil reset Microphone <bundle-id>  (outside CC).")
     return lines
 
 
