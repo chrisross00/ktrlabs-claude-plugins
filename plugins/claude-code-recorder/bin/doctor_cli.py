@@ -145,7 +145,7 @@ def _check_permissions() -> list[str]:
     if stderr_text.strip():
         lines.append("")
         lines.append("  Last ffmpeg stderr lines:")
-        for ln in [l for l in stderr_text.splitlines() if l.strip()][-4:]:
+        for ln in [line for line in stderr_text.splitlines() if line.strip()][-4:]:
             lines.append(f"    {ln}")
     return lines
 

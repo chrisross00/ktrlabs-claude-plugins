@@ -11,7 +11,7 @@ from pathlib import Path
 
 from bin import state as _state_mod
 from bin.devices import detect_devices
-from bin.paths import bin_dir, session_dir, sessions_root
+from bin.paths import bin_dir, session_dir
 from bin.slug import slugify
 from bin.state import State, save_state
 

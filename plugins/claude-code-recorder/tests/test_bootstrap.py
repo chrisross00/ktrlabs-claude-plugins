@@ -5,11 +5,9 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from bin.bootstrap import (
     MODEL_PATH_REL,
-    BootstrapError,
     check_and_install,
     compute_sha256,
     fast_path_ok,
