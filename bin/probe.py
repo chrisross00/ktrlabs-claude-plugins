@@ -49,6 +49,38 @@ def _ffprobe_has_stream(ffprobe: Path, media: Path, kind: str) -> bool:
     return result.returncode == 0 and bool(result.stdout.strip())
 
 
+# macOS silently substitutes black frames when Screen Recording is denied.
+# Pure-black frames have mean luminance near 0; real screens are virtually
+# never below this threshold.
+_MIN_SCREEN_LUMINANCE = 8.0
+
+
+def _mean_luminance(ffmpeg: Path, video: Path) -> float | None:
+    """Return mean Y (0..255) across ~10 frames, or None if extraction failed."""
+    result = subprocess.run(
+        [
+            str(ffmpeg), "-nostdin",
+            "-i", str(video),
+            "-vf", "signalstats",
+            "-vframes", "10",
+            "-f", "null", "-",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    values: list[float] = []
+    for line in result.stderr.splitlines():
+        if "YAVG:" in line:
+            try:
+                frag = line.split("YAVG:")[1].split()[0]
+                values.append(float(frag))
+            except (IndexError, ValueError):
+                pass
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
 def run_probe() -> ProbeResult:
     ffmpeg = plugin_data_root() / "bin" / "ffmpeg"
     # ffprobe lives next to ffmpeg in brew's prefix; when our bin/ffmpeg is
@@ -93,8 +125,15 @@ def run_probe() -> ProbeResult:
         stderr_text = err_log.read_text(errors="replace")
 
         if final_bytes >= PROBE_MIN_BYTES and ffprobe.exists() and out.exists():
-            screen_ok = _ffprobe_has_stream(ffprobe, out, "v")
+            has_video = _ffprobe_has_stream(ffprobe, out, "v")
             mic_ok = _ffprobe_has_stream(ffprobe, out, "a")
+            if has_video:
+                mean_y = _mean_luminance(ffmpeg, out)
+                # If luminance extraction failed, be optimistic; user's last
+                # resort is reading the stderr tail we return.
+                screen_ok = mean_y is None or mean_y >= _MIN_SCREEN_LUMINANCE
+            else:
+                screen_ok = False
         else:
             screen_ok = mic_ok = False
 
@@ -114,7 +153,11 @@ def permission_remediation_lines() -> list[str]:
         "(e.g. cmux, Terminal, iTerm) hosting Claude Code must be granted:",
         "  System Settings → Privacy & Security → Screen Recording",
         "  System Settings → Privacy & Security → Microphone",
-        "If the app isn't listed: use the + button, or quit+relaunch it, then retry.",
-        "If listed+off with no - button (mic pane): tccutil reset Microphone <bundle-id>",
-        "  (find bundle-id via `mdls -name kMDItemCFBundleIdentifier -r /Applications/<app>.app`)",
+        "If the app isn't listed, use the + button or quit+relaunch it, then retry.",
+        "If macOS has a cached decision and won't re-prompt, reset the TCC entry:",
+        "  mdls -name kMDItemCFBundleIdentifier -r /Applications/<app>.app",
+        "  tccutil reset ScreenCapture <bundle-id>   # for Screen Recording",
+        "  tccutil reset Microphone    <bundle-id>   # for Microphone",
+        "Note: Screen Recording capture that produces all-black frames means",
+        "macOS silently denied it — the TCC reset above is the fix.",
     ]
