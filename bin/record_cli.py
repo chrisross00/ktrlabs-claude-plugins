@@ -13,7 +13,11 @@ def main(argv: list[str]) -> int:
     if state is None:
         title = " ".join(argv).strip() or None
         session_id = start_recording(title=title)
-        print(f"Recording started (session: {session_id}). Run /record again to stop.")
+        print(
+            f"Recording started (session: {session_id}).\n"
+            "The orange dot in your macOS menu bar confirms screen capture is active.\n"
+            "Run /claude-code-recorder:record again to stop, or /claude-code-recorder:record-status to inspect."
+        )
         return 0
 
     if argv:

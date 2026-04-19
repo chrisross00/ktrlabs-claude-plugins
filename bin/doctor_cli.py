@@ -1,7 +1,10 @@
 """CLI for /record-doctor: diagnostics and cleanup."""
 from __future__ import annotations
 
+import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 from bin.bootstrap import check_and_install
 from bin.paths import plugin_data_root, sessions_root
@@ -28,6 +31,57 @@ def _check_state() -> list[str]:
     else:
         clear_state()
         lines.append(f"  Stale state (pid {state.pid} dead) — cleared.")
+    return lines
+
+
+def _check_permissions() -> list[str]:
+    """Probe avfoundation briefly to surface macOS permission state.
+
+    Runs a 0.5s ffmpeg capture to a throwaway file. Valid capture (>50KB) means
+    Screen Recording + Microphone are granted. Empty or tiny output means at
+    least one was denied / hasn't been approved yet.
+    """
+    lines = ["Permissions (macOS avfoundation probe):"]
+    ffmpeg = plugin_data_root() / "bin" / "ffmpeg"
+    if not ffmpeg.exists():
+        lines.append("  ffmpeg not installed — bootstrap first.")
+        return lines
+
+    with tempfile.TemporaryDirectory(prefix="cc-recorder-probe-") as tmp:
+        out = Path(tmp) / "probe.mp4"
+        try:
+            result = subprocess.run(
+                [
+                    str(ffmpeg), "-y", "-nostdin",
+                    "-f", "avfoundation", "-framerate", "30",
+                    "-i", "1:0", "-t", "0.5",
+                    str(out),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            lines.append("  TIMEOUT — probe hung. Likely a permission dialog")
+            lines.append("  is open. Accept it and rerun /record-doctor.")
+            return lines
+
+        size = out.stat().st_size if out.exists() else 0
+
+    if size > 50_000 and result.returncode == 0:
+        lines.append(f"  OK (probe captured {size // 1024} KB in 0.5s)")
+        return lines
+
+    # Failure path — surface the last few stderr lines + remediation.
+    lines.append(f"  NOT WORKING (probe produced {size} bytes, ffmpeg exit {result.returncode})")
+    tail = [line for line in result.stderr.splitlines() if line.strip()][-4:]
+    for line in tail:
+        lines.append(f"    {line}")
+    lines.append("")
+    lines.append("  To grant permissions on macOS:")
+    lines.append("    System Settings → Privacy & Security → Screen Recording → enable for Claude Code / Terminal")
+    lines.append("    System Settings → Privacy & Security → Microphone → same")
+    lines.append("  Then rerun /record-doctor to verify.")
     return lines
 
 
@@ -65,7 +119,7 @@ def main(argv: list[str]) -> int:
         print(f"Bootstrap: FAILED — {e}", file=sys.stderr)
         exit_code = 1
 
-    for section in (_check_deps(), _check_state(), _check_disk()):
+    for section in (_check_deps(), _check_permissions(), _check_state(), _check_disk()):
         print()
         for line in section:
             print(line)
