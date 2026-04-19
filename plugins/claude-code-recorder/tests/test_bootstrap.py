@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from bin.bootstrap import (
+    MODEL_PATH_REL,
     BootstrapError,
     check_and_install,
     compute_sha256,
@@ -33,7 +34,7 @@ def test_fast_path_ok_with_fresh_manifest_and_files(
 ) -> None:
     ffmpeg_hash = _touch(tmp_plugin_data / "bin" / "ffmpeg")
     whisper_hash = _touch(tmp_plugin_data / "bin" / "whisper")
-    model_hash = _touch(tmp_plugin_data / "models" / "ggml-small.en.bin")
+    model_hash = _touch(tmp_plugin_data / "models" / MODEL_PATH_REL)
     save_manifest(Manifest(
         verified_at=time.time(),
         ffmpeg_sha256=ffmpeg_hash,
@@ -53,7 +54,7 @@ def test_fast_path_fails_when_file_missing(tmp_plugin_data: Path, tmp_cache_root
 
 
 def test_fast_path_fails_when_stale(tmp_plugin_data: Path, tmp_cache_root: Path) -> None:
-    for name in ("bin/ffmpeg", "bin/whisper", "models/ggml-small.en.bin"):
+    for name in ("bin/ffmpeg", "bin/whisper", f"models/{MODEL_PATH_REL}"):
         _touch(tmp_plugin_data / name)
     save_manifest(Manifest(
         verified_at=time.time() - 30 * 86400,
@@ -84,7 +85,7 @@ def test_check_and_install_runs_install_when_missing(
 
     assert (tmp_plugin_data / "bin" / "ffmpeg").exists()
     assert (tmp_plugin_data / "bin" / "whisper").exists()
-    assert (tmp_plugin_data / "models" / "ggml-small.en.bin").exists()
+    assert (tmp_plugin_data / "models" / MODEL_PATH_REL).exists()
     assert called == ["model"]
 
 
@@ -93,7 +94,7 @@ def test_check_and_install_skips_install_on_fast_path(
 ) -> None:
     ffmpeg_hash = _touch(tmp_plugin_data / "bin" / "ffmpeg")
     whisper_hash = _touch(tmp_plugin_data / "bin" / "whisper")
-    model_hash = _touch(tmp_plugin_data / "models" / "ggml-small.en.bin")
+    model_hash = _touch(tmp_plugin_data / "models" / MODEL_PATH_REL)
     save_manifest(Manifest(
         verified_at=time.time(),
         ffmpeg_sha256=ffmpeg_hash,

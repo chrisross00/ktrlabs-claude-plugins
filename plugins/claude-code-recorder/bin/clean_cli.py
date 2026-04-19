@@ -41,6 +41,27 @@ def _format_size(n: int) -> str:
     return f"{n}TB"
 
 
+AUTO_PRUNE_DAYS = 30  # sessions older than this are removed by auto_prune()
+
+
+def auto_prune(max_age_days: int = AUTO_PRUNE_DAYS) -> int:
+    """Remove session directories older than `max_age_days`.
+
+    Called from the SessionStart hook so housekeeping happens without user
+    intervention. Returns the number of sessions removed (0 if none).
+    """
+    root = sessions_root()
+    if not root.exists():
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for d in root.iterdir():
+        if d.is_dir() and d.stat().st_mtime < cutoff:
+            shutil.rmtree(d, ignore_errors=True)
+            removed += 1
+    return removed
+
+
 def _list_sessions() -> list[tuple[Path, float, int]]:
     root = sessions_root()
     if not root.exists():

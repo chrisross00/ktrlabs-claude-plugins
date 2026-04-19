@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from bin.record_cli import main
+from bin.state import State
 
 
 @patch("bin.record_cli.stop_recording")
@@ -35,7 +36,7 @@ def test_active_runs_stop_and_prints_prompt(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    load_state.return_value = object()  # truthy
+    load_state.return_value = State(pid=1, session_id="s", started_at=0.0, is_paused=False)
     sdir = tmp_path / "session"
     sdir.mkdir()
     (sdir / "prompt.md").write_text("# hi\n[00:00] demo\n")
@@ -49,3 +50,26 @@ def test_active_runs_stop_and_prints_prompt(
     out = capsys.readouterr().out
     assert "# hi" in out
     assert "[00:00] demo" in out
+
+
+@patch("bin.record_cli.stop_recording")
+@patch("bin.record_cli.resume_recording")
+@patch("bin.record_cli.start_recording")
+@patch("bin.record_cli.load_state")
+def test_paused_state_routes_to_resume(
+    load_state: MagicMock,
+    start: MagicMock,
+    resume: MagicMock,
+    stop: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    load_state.return_value = State(pid=1, session_id="s", started_at=0.0, is_paused=True)
+    resume.return_value = True
+
+    exit_code = main([])
+
+    resume.assert_called_once()
+    start.assert_not_called()
+    stop.assert_not_called()
+    assert exit_code == 0
+    assert "resumed" in capsys.readouterr().out.lower()

@@ -63,8 +63,15 @@ def _spawn_ffmpeg(video_path: Path) -> int:
     return int(pid_path.read_text().strip())
 
 
+def _next_chunk_path(sdir: Path) -> Path:
+    """Return the next `video_NNN.mp4` path not yet used in sdir."""
+    existing = sorted(sdir.glob("video_*.mp4"))
+    n = len(existing)
+    return sdir / f"video_{n:03d}.mp4"
+
+
 def start_recording(title: str | None) -> str:
-    """Create session dir, spawn ffmpeg, persist state. Returns session_id."""
+    """Create session dir, spawn ffmpeg writing video_000.mp4, persist state."""
     base = _timestamp()
     if title:
         base = f"{base}-{slugify(title)}"
@@ -79,10 +86,76 @@ def start_recording(title: str | None) -> str:
     }
     (sdir / "metadata.json").write_text(json.dumps(metadata, indent=2))
 
-    video_path = sdir / "video.mp4"
-    pid = _spawn_ffmpeg(video_path)
-    save_state(State(pid=pid, session_id=session_id, started_at=time.time()))
+    chunk = _next_chunk_path(sdir)  # video_000.mp4 on first call
+    pid = _spawn_ffmpeg(chunk)
+    save_state(State(
+        pid=pid, session_id=session_id, started_at=time.time(), is_paused=False,
+    ))
     return session_id
+
+
+def pause_recording() -> bool:
+    """Stop ffmpeg cleanly, mark state as paused. Returns True if paused,
+    False if idle / already paused / process dead."""
+    state_obj = _state_mod.load_state()
+    if state_obj is None or state_obj.is_paused:
+        return False
+    if not _state_mod.is_process_alive(state_obj.pid):
+        _state_mod.clear_state()
+        return False
+    _stop_ffmpeg(state_obj.pid)
+    save_state(State(
+        pid=state_obj.pid,
+        session_id=state_obj.session_id,
+        started_at=state_obj.started_at,
+        is_paused=True,
+    ))
+    return True
+
+
+def resume_recording() -> bool:
+    """Spawn a new ffmpeg writing the next chunk; clear paused flag. Returns
+    True if resumed, False if nothing to resume."""
+    state_obj = _state_mod.load_state()
+    if state_obj is None or not state_obj.is_paused:
+        return False
+    sdir = session_dir(state_obj.session_id)
+    chunk = _next_chunk_path(sdir)
+    pid = _spawn_ffmpeg(chunk)
+    save_state(State(
+        pid=pid,
+        session_id=state_obj.session_id,
+        started_at=state_obj.started_at,
+        is_paused=False,
+    ))
+    return True
+
+
+def _concat_chunks(sdir: Path) -> None:
+    """Produce sdir/video.mp4 from sdir/video_*.mp4. Deletes chunks on success."""
+    chunks = sorted(sdir.glob("video_*.mp4"))
+    if not chunks:
+        return
+    final = sdir / "video.mp4"
+    if len(chunks) == 1:
+        chunks[0].rename(final)
+        return
+    listing = sdir / "chunks.txt"
+    listing.write_text("\n".join(f"file '{c.resolve()}'" for c in chunks) + "\n")
+    subprocess.run(
+        [
+            str(bin_dir() / "ffmpeg"), "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(listing),
+            "-c", "copy",
+            str(final),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    listing.unlink(missing_ok=True)
+    for c in chunks:
+        c.unlink(missing_ok=True)
 
 
 def _stop_ffmpeg(pid: int, timeout_s: float = 10.0) -> None:
@@ -124,18 +197,24 @@ def _run_pipeline(sdir: Path) -> None:
 
 
 def stop_recording() -> Path | None:
-    """Stop active recording and run the pipeline. Returns session dir or None."""
+    """Stop active recording (or paused session), concat chunks, run pipeline.
+    Returns session dir or None if there was nothing to stop."""
     state_obj = _state_mod.load_state()
     if state_obj is None:
         return None
 
-    if not _state_mod.is_process_alive(state_obj.pid):
+    if state_obj.is_paused:
+        # ffmpeg already terminated at pause time; no process to signal.
+        pass
+    elif not _state_mod.is_process_alive(state_obj.pid):
         _state_mod.clear_state()
         return None
+    else:
+        _stop_ffmpeg(state_obj.pid)
 
-    _stop_ffmpeg(state_obj.pid)
     _state_mod.clear_state()
 
     sdir = session_dir(state_obj.session_id)
+    _concat_chunks(sdir)
     _run_pipeline(sdir)
     return sdir

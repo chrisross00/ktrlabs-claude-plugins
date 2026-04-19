@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from bin.clean_cli import main
+from bin.clean_cli import auto_prune, main
 
 
 def _make_session(root: Path, name: str, age_days: float = 0.0, size_bytes: int = 1000) -> Path:
@@ -90,3 +90,20 @@ def test_older_than_bad_arg(
     assert code == 1
     err = capsys.readouterr().err
     assert "format" in err.lower() or "invalid" in err.lower()
+
+
+def test_auto_prune_removes_only_old(tmp_cache_root: Path) -> None:
+    _make_session(tmp_cache_root, "old-1", age_days=60.0)
+    _make_session(tmp_cache_root, "old-2", age_days=45.0)
+    _make_session(tmp_cache_root, "fresh", age_days=2.0)
+
+    removed = auto_prune(max_age_days=30)
+
+    assert removed == 2
+    assert not (tmp_cache_root / "sessions" / "old-1").exists()
+    assert not (tmp_cache_root / "sessions" / "old-2").exists()
+    assert (tmp_cache_root / "sessions" / "fresh").exists()
+
+
+def test_auto_prune_noop_when_no_sessions(tmp_cache_root: Path) -> None:
+    assert auto_prune() == 0

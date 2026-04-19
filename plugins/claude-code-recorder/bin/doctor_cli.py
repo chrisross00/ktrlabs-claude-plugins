@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from bin.bootstrap import check_and_install
+from bin.bootstrap import MODEL_PATH_REL, check_and_install
 from bin.devices import DeviceDetectionError, detect_devices
 from bin.paths import plugin_data_root, sessions_root
 from bin.state import clear_state, is_process_alive, load_state
@@ -16,7 +16,7 @@ from bin.state import clear_state, is_process_alive, load_state
 
 def _check_deps() -> list[str]:
     lines = ["Dependencies:"]
-    for rel in ["bin/ffmpeg", "bin/whisper", "models/ggml-small.en.bin"]:
+    for rel in ["bin/ffmpeg", "bin/whisper", f"models/{MODEL_PATH_REL}"]:
         path = plugin_data_root() / rel
         status = "OK" if path.exists() else "MISSING"
         lines.append(f"  {rel}: {status}")

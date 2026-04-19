@@ -1,30 +1,33 @@
 # Backlog — claude-code-recorder
 
-Improvements deferred from v0.1.0, roughly ordered by expected impact.
+Deferred items after v0.3.0, roughly ordered by expected impact.
 
 ## Correctness / reliability
 
-- **Multilingual transcription.** Current `small.en` model silently produces garbage for non-English speech. Ship the multilingual `small` model, or detect language and warn.
-- **Model upgrade path.** Bootstrap only verifies existing hashes — no migration if a later version needs a newer model. For long-term 3000-user support, add a version-keyed manifest.
-- **Brittle brew binary discovery.** We hardcode `whisper-cli` inside the `whisper-cpp` brew package. A rename would break us silently. Search `<prefix>/bin/` for any `whisper*` executable and prefer the newest.
+- **Model upgrade path.** Bootstrap only verifies existing hashes; no migration if a future version needs a newer model. For long-term 3000-user support, add a version-keyed manifest.
 
 ## UX / polish
 
-- **Frame cue list is too broad.** "this", "here", "see" fire on nearly every sentence; 2-min recordings typically emit 30+ cued frames before dedup. Tighten triggers (multi-word phrases, verb-biased) or weight frames by surrounding segment density.
-- **Perceptual dedup is effectively disabled** under system Python because `imagehash` isn't installed. Vendor `imagehash` into the plugin or ship a bundled Python env so the dedup pass actually runs.
-- **Shrink first-run footprint.** The ~500MB `small.en` model blocks users for minutes on first install. Ship `tiny.en` (~75MB) as the quick-start default; `small`/`medium` as opt-in upgrades.
-- **Audio-level feedback.** `/record-status` could show the last few seconds' RMS so users don't discover a muted mic only after stopping.
-- **Auto-prune old sessions.** Currently sessions accumulate under `~/.cache/recorder/sessions/` until the user runs `/record-clean`. After N days or M sessions, prune oldest automatically.
-- **Pause/resume.** One-take recording is a usability constraint. Let users pause and resume without restarting ffmpeg.
+- **Perceptual dedup effectively disabled** under system Python because `imagehash` isn't installed. Vendor `imagehash` in the plugin or ship a bundled Python env so the dedup pass actually runs.
 
 ## Performance
 
-- **Pipeline is sequential.** `transcribe` and `extract_frames` are independent — could run in parallel for ~30% speedup on long recordings.
-- **ffmpeg log grows unbounded** within a session. Not a real issue until someone records for hours, but cheap to rotate.
+- **Pipeline is sequential.** `transcribe` and `extract_frames` are independent; could run in parallel for ~30% speedup on long recordings.
+- **ffmpeg log unbounded** within a session. Rotate after a size threshold.
 
 ## Distribution / operations
 
-- **Integration-test gap** (from the post-mortem). 62 unit tests are mostly mocked. Until at least the binary-install smoke, real-subprocess-detachment, and E2E-fixture tests land, regressions will ship the same way v0.1.0 did.
-- **No telemetry.** Zero signal about usage/failure modes at scale. Even anonymous "X recorded / Y pipeline-failed at stage Z" would be invaluable. Requires privacy review.
-- **No plugin signing.** Any CC install of this plugin is full-trust. For internal org deployment, at minimum sign commits; ideally a signed release artifact + verified marketplace manifest.
-- **Plan/spec drift.** The original `docs/superpowers/specs/` and `plans/` documents don't reflect the 9 real-world bugfixes from the post-mortem. Future contributors reading them get a false picture.
+- **Integration-test gap** (from the post-mortem). 81 unit tests still mostly mocked. Until binary-install smoke, real-subprocess-detachment, and E2E-fixture tests land, regressions will ship the same way v0.1.0 did.
+- **No telemetry.** Zero signal at scale. Anthropic's plugin ecosystem doesn't provide a mechanism yet — if/when they do, revisit.
+- **No plugin signing.** Any CC install is full-trust. Anthropic's plugin ecosystem doesn't provide signing yet — revisit if that changes.
+- **Plan/spec drift.** `docs/superpowers/specs/` and `plans/` predate the 9 post-mortem bugfixes plus the v0.2.0 and v0.3.0 improvements. Either update or archive.
+
+## Done in 0.3.0
+
+- ~~Multilingual transcription~~ — switched default to `ggml-tiny.bin` (multilingual).
+- ~~Shrink first-run footprint~~ — `tiny` is ~75 MB vs `small.en`'s ~500 MB.
+- ~~Brittle brew binary discovery~~ — `install_whisper` now tries `whisper-cli`, `whisper-cpp`, `main` in order.
+- ~~Frame cue list too broad~~ — tightened to action-verbs + pointing phrases; dropped bare "this/here/see".
+- ~~Auto-prune old sessions~~ — sessions older than 30 days removed by SessionStart hook.
+- ~~Audio-level feedback~~ — `/record-status` now includes a mean-volume probe with muted-mic warning.
+- ~~Pause/resume~~ — `/record-pause` + `/record` (when paused) writes discrete chunks; `stop_recording` concats via ffmpeg's concat demuxer.

@@ -14,7 +14,7 @@ From within Claude Code, once per user:
 On the **first new CC session after install**, a SessionStart hook bootstraps dependencies:
 
 - `ffmpeg` and `whisper-cpp` via Homebrew
-- Whisper `small.en` model (~500 MB) from Hugging Face
+- Whisper `tiny` multilingual model (~75 MB) from Hugging Face
 
 Binaries and the model are cached under `~/.local/share/claude-code-recorder/`. Subsequent sessions verify in ~50 ms.
 
@@ -41,10 +41,12 @@ Notes:
 
 | Command | What it does |
 |---|---|
-| `/claude-code-recorder:record [TITLE]` | Toggle. First call starts recording (optional title); second call stops and emits a chronological prompt (transcript interleaved with screenshots) into your CC conversation. |
-| `/claude-code-recorder:record-status` | Inspect the active recording without stopping it — session ID, elapsed time, video file size, ffmpeg PID liveness. |
-| `/claude-code-recorder:record-clean [all \| older-than <Nd\|Nh\|Nm> \| <id-or-slug>]` | No args: list sessions with size/age. Args: delete all, by age, or by session ID. |
-| `/claude-code-recorder:record-doctor` | Verify dependencies, permissions, state, and disk usage. Repairs stale state.json automatically. |
+| `/claude-code-recorder:record [TITLE]` | Toggle. First call starts recording (optional title). If paused, resumes. Otherwise stops and emits a chronological prompt (transcript interleaved with screenshots) into your CC conversation. |
+| `/claude-code-recorder:record-pause` | Pause the active recording without running the pipeline. Run `/record` again to resume. Useful for multi-take demos. |
+| `/claude-code-recorder:record-cancel` | Stop ffmpeg and delete the session dir without running the pipeline. Use when you want to start over. |
+| `/claude-code-recorder:record-status` | Inspect the active recording without stopping it — session ID, elapsed time, video file size, ffmpeg PID liveness, recent mic level. |
+| `/claude-code-recorder:record-clean [all \| older-than <Nd\|Nh\|Nm> \| <id-or-slug>]` | No args: list sessions with size/age. Args: delete all, by age, or by session ID. Sessions older than 30 days are also auto-pruned on plugin startup. |
+| `/claude-code-recorder:record-doctor` | Verify dependencies, permissions (screen + mic checked independently via ffprobe), state, and disk usage. Repairs stale state automatically. |
 
 A running recording is indicated by the **orange dot** in the macOS menu bar (native macOS screen-capture indicator).
 

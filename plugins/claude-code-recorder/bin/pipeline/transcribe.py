@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from bin.bootstrap import MODEL_PATH_REL
 from bin.paths import bin_dir, models_dir
 
 
@@ -38,7 +39,7 @@ def _run_whisper(audio_path: Path) -> dict:
     subprocess.run(
         [
             str(bin_dir() / "whisper"),
-            "-m", str(models_dir() / "ggml-small.en.bin"),
+            "-m", str(models_dir() / MODEL_PATH_REL),
             "-f", str(audio_path),
             "-oj",
             "-of", str(out_prefix),

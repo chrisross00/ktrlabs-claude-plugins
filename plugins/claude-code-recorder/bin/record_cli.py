@@ -2,22 +2,34 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-from bin.record_toggle import start_recording, stop_recording
+from bin.record_toggle import resume_recording, start_recording, stop_recording
 from bin.state import load_state
 
 
 def main(argv: list[str]) -> int:
     state = load_state()
+
     if state is None:
         title = " ".join(argv).strip() or None
         session_id = start_recording(title=title)
         print(
             f"Recording started (session: {session_id}).\n"
             "The orange dot in your macOS menu bar confirms screen capture is active.\n"
-            "Run /claude-code-recorder:record again to stop, or /claude-code-recorder:record-status to inspect."
+            "Run /claude-code-recorder:record again to stop, "
+            "/claude-code-recorder:record-pause to pause,\n"
+            "or /claude-code-recorder:record-status to inspect."
         )
+        return 0
+
+    if state.is_paused:
+        if argv:
+            print("Resuming paused session — title argument ignored.", file=sys.stderr)
+        resumed = resume_recording()
+        if resumed:
+            print(f"Resumed recording (session: {state.session_id}).")
+        else:
+            print("Could not resume — state changed.", file=sys.stderr)
         return 0
 
     if argv:

@@ -13,6 +13,7 @@ class State:
     pid: int
     session_id: str
     started_at: float
+    is_paused: bool = False
 
 
 def load_state() -> State | None:
@@ -20,6 +21,8 @@ def load_state() -> State | None:
     if not path.exists():
         return None
     data = json.loads(path.read_text())
+    # Tolerate pre-0.3 state files without newer fields.
+    data.setdefault("is_paused", False)
     return State(**data)
 
 

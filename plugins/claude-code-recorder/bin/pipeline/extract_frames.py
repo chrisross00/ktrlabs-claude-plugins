@@ -9,8 +9,21 @@ from pathlib import Path
 
 from bin.paths import bin_dir
 
+# Tightened cue list: prefer strong, action-oriented phrases over weak deictics
+# ("this", "here", "see" fire on nearly every sentence). We want frames at
+# moments the narrator is calling attention to something specific.
+#
+# Keeps: verbs that imply a specific thing-on-screen ("notice", "watch", "look at"),
+#        action verbs ("click", "type", "press", "scroll", "drag"),
+#        pointing phrases ("right here", "right there", "over here", "over there").
+# Drops: bare "here/this/see" which are too common to be useful signals.
 DEICTIC_PATTERN = re.compile(
-    r"\b(here|this|notice|look at|see|watch|click|type|press)\b",
+    r"\b("
+    r"notice|watch|look at|"
+    r"click|type|press|scroll|drag|hover|select|"
+    r"right (?:here|there)|over (?:here|there)|"
+    r"check out|pay attention to"
+    r")\b",
     re.IGNORECASE,
 )
 DEDUP_WINDOW_S = 2.0

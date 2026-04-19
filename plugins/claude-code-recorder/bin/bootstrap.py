@@ -18,8 +18,11 @@ from bin.paths import bin_dir, models_dir
 
 FFMPEG_PATH_REL = "ffmpeg"
 WHISPER_PATH_REL = "whisper"
-MODEL_PATH_REL = "ggml-small.en.bin"
-MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
+# tiny multilingual: ~75MB (vs ~500MB for small.en). Supports all languages.
+# Accuracy is lower than small but plenty for clear screen-demo narration.
+MODEL_PATH_REL = "ggml-tiny.bin"
+MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+MODEL_MIN_BYTES = 50_000_000  # tiny is ~75MB; refuse anything suspiciously small
 MANIFEST_TTL = 7 * 86400  # 7 days
 
 
@@ -47,27 +50,36 @@ def fast_path_ok() -> bool:
     )
 
 
-def _link_brew_binary(dest: Path, formula: str, binary_name: str) -> str:
-    """Ensure `formula` is installed via brew, then symlink its binary to dest.
+def _link_brew_binary(dest: Path, formula: str, binary_candidates: list[str]) -> str:
+    """Ensure `formula` is installed via brew, symlink the first matching binary
+    in <prefix>/bin/ from `binary_candidates` to dest.
 
-    Symlink (not copy) preserves the binary's @rpath-relative dylib lookups
-    so libraries in the brew prefix's lib/ still resolve.
+    Trying multiple candidate names protects against upstream renames — e.g.
+    whisper.cpp's binary was `main`, then `whisper-cpp`, then `whisper-cli`.
+    Symlink (not copy) preserves the binary's @rpath-relative dylib lookups.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     brew = shutil.which("brew")
     if not brew:
         raise BootstrapError("Homebrew not found. Install from https://brew.sh then retry.")
-    # `brew --prefix <formula>` exits non-zero if not installed.
     probe = subprocess.run([brew, "--prefix", formula], capture_output=True, text=True)
     if probe.returncode != 0:
         subprocess.run([brew, "install", formula], check=True)
         probe = subprocess.run(
             [brew, "--prefix", formula], capture_output=True, text=True, check=True
         )
-    src = Path(probe.stdout.strip()) / "bin" / binary_name
-    if not src.exists():
+    prefix_bin = Path(probe.stdout.strip()) / "bin"
+    src: Path | None = None
+    for name in binary_candidates:
+        candidate = prefix_bin / name
+        if candidate.exists():
+            src = candidate
+            break
+    if src is None:
+        available = sorted(p.name for p in prefix_bin.iterdir()) if prefix_bin.exists() else []
         raise BootstrapError(
-            f"Expected {src} after `brew install {formula}` but it is missing."
+            f"None of {binary_candidates} found under {prefix_bin} after "
+            f"`brew install {formula}`. Available: {available}"
         )
     if dest.exists() or dest.is_symlink():
         dest.unlink()
@@ -76,11 +88,12 @@ def _link_brew_binary(dest: Path, formula: str, binary_name: str) -> str:
 
 
 def install_ffmpeg(dest: Path) -> str:
-    return _link_brew_binary(dest, "ffmpeg", "ffmpeg")
+    return _link_brew_binary(dest, "ffmpeg", ["ffmpeg"])
 
 
 def install_whisper(dest: Path) -> str:
-    return _link_brew_binary(dest, "whisper-cpp", "whisper-cli")
+    # Tried in order; accommodates whisper.cpp's rename history.
+    return _link_brew_binary(dest, "whisper-cpp", ["whisper-cli", "whisper-cpp", "main"])
 
 
 def download_model(dest: Path) -> str:
@@ -92,7 +105,7 @@ def download_model(dest: Path) -> str:
             shutil.copyfileobj(resp, out)
         # whisper.cpp doesn't publish a checksum manifest; accept any successful download
         # but on attempt 2, require at least that file is nonempty
-        if tmp.stat().st_size < 1_000_000:
+        if tmp.stat().st_size < MODEL_MIN_BYTES:
             tmp.unlink(missing_ok=True)
             if attempt == 2:
                 raise BootstrapError(f"Model download failed (too small) from {MODEL_URL}")
