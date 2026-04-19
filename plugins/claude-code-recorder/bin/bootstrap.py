@@ -18,11 +18,12 @@ from bin.paths import bin_dir, models_dir
 
 FFMPEG_PATH_REL = "ffmpeg"
 WHISPER_PATH_REL = "whisper"
-# tiny multilingual: ~75MB (vs ~500MB for small.en). Supports all languages.
-# Accuracy is lower than small but plenty for clear screen-demo narration.
-MODEL_PATH_REL = "ggml-tiny.bin"
-MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
-MODEL_MIN_BYTES = 50_000_000  # tiny is ~75MB; refuse anything suspiciously small
+# base multilingual: ~150MB. Noticeably more accurate than tiny (which garbled
+# normal narration in testing) while still ~70% smaller than small. Supports
+# all languages via a single model.
+MODEL_PATH_REL = "ggml-base.bin"
+MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+MODEL_MIN_BYTES = 100_000_000  # base is ~140MB; refuse anything suspiciously small
 MANIFEST_TTL = 7 * 86400  # 7 days
 
 

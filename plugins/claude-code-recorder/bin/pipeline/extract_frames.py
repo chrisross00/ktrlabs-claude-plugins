@@ -27,7 +27,9 @@ DEICTIC_PATTERN = re.compile(
     re.IGNORECASE,
 )
 DEDUP_WINDOW_S = 2.0
-SCENE_THRESHOLD = 0.4
+SCENE_THRESHOLD = 0.2  # Lowered from 0.4; 0.4 missed common screen-demo edits.
+MIN_FRAMES = 3         # Fallback: if fewer than this produced, sample evenly.
+FALLBACK_INTERVAL_S = 10.0
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,42 @@ def _detect_scene_changes(video: Path) -> list[float]:
     for match in re.finditer(r"pts_time:([\d.]+)", result.stderr):
         timestamps.append(float(match.group(1)))
     return timestamps
+
+
+def _get_video_duration_s(video: Path) -> float | None:
+    """Ask ffprobe for the video's duration in seconds. None if it can't tell."""
+    ffprobe = (bin_dir() / "ffmpeg").resolve().parent / "ffprobe"
+    if not ffprobe.exists():
+        return None
+    result = subprocess.run(
+        [
+            str(ffprobe), "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "csv=p=0",
+            str(video),
+        ],
+        capture_output=True, text=True,
+    )
+    try:
+        return float(result.stdout.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _fallback_sampling(video: Path, interval_s: float) -> list[FrameEvent]:
+    """Evenly-spaced sample frames across the video's duration.
+
+    Used as a floor so recordings of static screens still get visual context.
+    """
+    duration = _get_video_duration_s(video)
+    if not duration or duration < interval_s:
+        return []
+    events: list[FrameEvent] = []
+    t = 0.0
+    while t < duration:
+        events.append(FrameEvent(timestamp_s=t, trigger="sample"))
+        t += interval_s
+    return events
 
 
 def find_deictic_cues(segments: list[dict]) -> list[FrameEvent]:
@@ -142,6 +180,12 @@ def extract_frames(session_dir: Path) -> None:
     scene_events = [FrameEvent(t, "scene") for t in _detect_scene_changes(video)]
     cue_events = find_deictic_cues(transcript_segments)
     merged = merge_events(scene_events, cue_events, DEDUP_WINDOW_S)
+
+    # Fallback: if nothing strong fired, evenly sample the video so Claude
+    # has at least some visual context instead of zero frames.
+    if len(merged) < MIN_FRAMES:
+        sampled = _fallback_sampling(video, FALLBACK_INTERVAL_S)
+        merged = dedup_timestamps(merged + sampled, DEDUP_WINDOW_S)
 
     for e in merged:
         _extract_frame_png(video, e.timestamp_s, frames_dir / _frame_filename(e))
