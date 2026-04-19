@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from bin import state as _state_mod
+from bin.devices import detect_devices
 from bin.paths import bin_dir, session_dir, sessions_root
 from bin.slug import slugify
 from bin.state import State, save_state
@@ -38,10 +39,11 @@ def _spawn_ffmpeg(video_path: Path) -> int:
     ffmpeg = str(bin_dir() / "ffmpeg")
     log_path = video_path.parent / "ffmpeg.log"
     pid_path = video_path.parent / "ffmpeg.pid"
+    devices = detect_devices()
     # Quote every path to tolerate spaces. Use bash -c so nohup/disown work.
     shell_cmd = (
         f'nohup "{ffmpeg}" -y -nostdin -f avfoundation -framerate 30 '
-        f'-i "1:0" "{video_path}" '
+        f'-i "{devices.ffmpeg_input}" "{video_path}" '
         f'>"{log_path}" 2>&1 & '
         f'echo $! > "{pid_path}"; disown'
     )
