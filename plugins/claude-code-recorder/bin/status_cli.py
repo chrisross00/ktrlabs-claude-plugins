@@ -85,8 +85,15 @@ def main(argv: list[str]) -> int:
         return 0
 
     sdir = session_dir(state.session_id)
-    video = sdir / "video.mp4"
-    video_size = video.stat().st_size if video.exists() else 0
+    # During recording, ffmpeg writes to video_NNN.mp4 chunk files; the
+    # concatenated video.mp4 is only produced after stop. Report total size
+    # across all existing sources.
+    video_size = 0
+    final = sdir / "video.mp4"
+    if final.exists():
+        video_size = final.stat().st_size
+    for chunk in sdir.glob("video_*.mp4"):
+        video_size += chunk.stat().st_size
     elapsed = time.time() - state.started_at
 
     alive = is_process_alive(state.pid)
