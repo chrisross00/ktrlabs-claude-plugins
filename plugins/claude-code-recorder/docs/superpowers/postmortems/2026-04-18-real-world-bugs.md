@@ -65,6 +65,6 @@ Prioritized from highest-value to least:
 
 The 62 unit tests gave **high confidence in internal logic correctness**, but near-zero confidence in **external integration correctness**. Mock-heavy TDD produces well-shaped code and fast feedback; it doesn't guarantee the code touches reality correctly.
 
-For a platform plugin targeting 3000 engineers, ship-readiness requires at least one *real install and exercise* in the development environment before declaring done — not a substitute for unit tests, but complementary and irreplaceable. This exercise is what drove all 9 bugfixes above, found in ~90 minutes of testing that unit tests could not have caught in any duration.
+Ship-readiness requires at least one *real install and exercise* in the development environment before declaring done — not a substitute for unit tests, but complementary and irreplaceable. This exercise is what drove all 9 bugfixes above, found in ~90 minutes of testing that unit tests could not have caught in any duration.
 
 **Rule of thumb for future plans**: budget "install the thing, use the thing, find 5 bugs you couldn't have predicted" as an explicit checkpoint in every plan with an external runtime contract.

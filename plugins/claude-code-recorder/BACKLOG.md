@@ -4,7 +4,7 @@ Deferred items after v0.3.0, roughly ordered by expected impact.
 
 ## Correctness / reliability
 
-- **Model upgrade path.** Bootstrap only verifies existing hashes; no migration if a future version needs a newer model. For long-term 3000-user support, add a version-keyed manifest.
+- **Model upgrade path.** Bootstrap only verifies existing hashes; no migration if a future version needs a newer model. Add a version-keyed manifest for long-term maintainability.
 
 ## UX / polish
 

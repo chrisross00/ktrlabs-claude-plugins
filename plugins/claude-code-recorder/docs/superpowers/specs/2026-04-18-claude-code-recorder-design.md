@@ -14,7 +14,7 @@ A Loom-style "record your screen while narrating" workflow would be far faster: 
 
 A Claude Code plugin that lets a developer record a narrated screen demo, then automatically converts it into a chronological prompt (narration interleaved with relevant screenshots) that's dropped into the current CC conversation for Claude to act on.
 
-Target audience: an internal developer population of ~3000 engineers. Onboarding friction is a first-class concern.
+Onboarding friction is a first-class concern: the plugin must install cleanly for any developer with no prerequisite knowledge of its internals.
 
 ## Non-goals
 
@@ -34,7 +34,7 @@ Target audience: an internal developer population of ~3000 engineers. Onboarding
 | Recording tool | `ffmpeg` with avfoundation | Single binary captures screen + mic; portable; install friction absorbed by the plugin's SessionStart hook |
 | Output structure | Chronological timeline — narration interleaved with screenshot paths at their timestamps | Preserves temporal cause/effect; Claude invokes `Read` on paths for vision |
 | Internal architecture | Staged pipeline (`capture → transcribe → extract_frames → assemble`) | Each stage independently testable; iterating on heuristics touches one file |
-| Distribution | CC plugin marketplace | One-step install (`/plugin install`) for the org |
+| Distribution | CC plugin marketplace | One-step install (`/plugin install`) for any end user |
 | Dependency bootstrap | SessionStart hook + `${CLAUDE_PLUGIN_DATA}` | Official CC pattern; lazy install on first session; cached across plugin updates |
 
 Claude Code plugin slash commands cannot directly attach images to prompts. Workaround: the generated `prompt.md` contains image file paths as text, and Claude auto-invokes the `Read` tool (which supports PNG vision) on those paths.
